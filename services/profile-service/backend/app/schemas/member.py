@@ -25,6 +25,9 @@ class MemberCreate(MemberBase):
 
 class MemberGetRequest(BaseModel):
     member_id: str
+    viewer_id: Optional[str] = None
+    emit_profile_viewed: bool = False
+    view_source: Optional[str] = None
 
 
 class MemberUpdate(BaseModel):

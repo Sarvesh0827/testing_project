@@ -58,6 +58,28 @@ def get_member_route(payload: MemberGetRequest, db: Session = Depends(get_db)):
     member = get_member(db, payload.member_id)
     if not member:
         return MemberResponse(success=False, message="Member not found", error="Member not found")
+
+    if payload.emit_profile_viewed:
+        actor_id = payload.viewer_id or "anonymous"
+        trace_id = str(uuid4())
+        view_source = payload.view_source or "profile_page"
+
+        event = build_event(
+            event_type="profile.viewed",
+            actor_id=actor_id,
+            entity_type="member",
+            entity_id=payload.member_id,
+            payload={
+                "profile_id": payload.member_id,
+                "view_source": view_source,
+                "route": f"/members/{payload.member_id}",
+                "viewer_authenticated": payload.viewer_id is not None,
+            },
+            trace_id=trace_id,
+            idempotency_key=f"profile-viewed:{actor_id}:{payload.member_id}:{trace_id}",
+        )
+        publish_event(settings.kafka_profile_viewed_topic, event, key=payload.member_id)
+
     return MemberResponse(success=True, message="Member fetched successfully", member=member)
 
 
@@ -106,11 +128,19 @@ async def upload_photo_route(
 ):
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
-        return PhotoUploadResponse(success=False, message="Invalid file type", error="Allowed: jpg, jpeg, png, gif, webp")
+        return PhotoUploadResponse(
+            success=False,
+            message="Invalid file type",
+            error="Allowed: jpg, jpeg, png, gif, webp",
+        )
 
     content = await file.read()
     if len(content) > settings.max_file_size_mb * 1024 * 1024:
-        return PhotoUploadResponse(success=False, message="File too large", error=f"Max size is {settings.max_file_size_mb} MB")
+        return PhotoUploadResponse(
+            success=False,
+            message="File too large",
+            error=f"Max size is {settings.max_file_size_mb} MB",
+        )
 
     filename = f"photo_{uuid4().hex}{suffix}"
     output_path = settings.upload_path / filename
@@ -137,4 +167,9 @@ async def upload_photo_route(
         )
         publish_event(settings.kafka_member_updated_topic, event, key=member_id)
 
-    return PhotoUploadResponse(success=True, message="Photo uploaded successfully", profile_photo_url=photo_url, filename=filename)
+    return PhotoUploadResponse(
+        success=True,
+        message="Photo uploaded successfully",
+        profile_photo_url=photo_url,
+        filename=filename,
+    )

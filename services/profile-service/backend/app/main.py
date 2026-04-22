@@ -39,6 +39,7 @@ def health_check():
         "kafka_topics": {
             "member_created": settings.kafka_member_created_topic,
             "member_updated": settings.kafka_member_updated_topic,
+            "profile_viewed": settings.kafka_profile_viewed_topic,
         },
     }
 

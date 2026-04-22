@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     kafka_client_id: str = "profile-service"
     kafka_member_created_topic: str = "member.created"
     kafka_member_updated_topic: str = "member.updated"
+    kafka_profile_viewed_topic: str = "profile.viewed"
     kafka_request_timeout_ms: int = 5000
 
     model_config = SettingsConfigDict(
