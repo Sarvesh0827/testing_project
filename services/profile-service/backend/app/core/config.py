@@ -19,6 +19,17 @@ class Settings(BaseSettings):
     upload_dir: str = "app/uploads"
     max_file_size_mb: int = 5
 
+    # Auth / JWT
+    secret_key: str = "changeme-use-a-long-random-string-in-production"
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
+
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8002/api/auth/google/callback"
+    frontend_url: str = "http://localhost:5173"
+
     # Kafka settings
     kafka_enabled: bool = True
     kafka_bootstrap_servers: str = "localhost:9092"

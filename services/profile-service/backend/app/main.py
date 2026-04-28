@@ -3,15 +3,18 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.api.routes.member_routes import router as member_router
+from app.api.routes.auth_routes import router as auth_router
 from app.core.config import settings
 from app.db.session import Base, engine
 from app.utils.kafka_producer import close_kafka_producer, get_kafka_producer
+from app.utils.kafka_consumer import start_kafka_consumer
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     get_kafka_producer()
+    start_kafka_consumer()
     yield
     close_kafka_producer()
 
@@ -20,7 +23,7 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.client_origin, "http://127.0.0.1:5173"],
+    allow_origins=[settings.client_origin, "http://127.0.0.1:3000", "http://localhost:5173", "http://127.0.0.1:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,3 +48,4 @@ def health_check():
 
 
 app.include_router(member_router, prefix=settings.api_v1_prefix)
+app.include_router(auth_router, prefix=settings.api_v1_prefix)

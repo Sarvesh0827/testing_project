@@ -56,6 +56,7 @@ class MemberSearchRequest(BaseModel):
     skill: Optional[str] = None
     location: Optional[str] = None
     keyword: Optional[str] = None
+    limit: Optional[int] = None
 
 
 class MemberResponse(BaseModel):

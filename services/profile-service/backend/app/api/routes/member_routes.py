@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db
+from app.api.deps import get_current_user
 from app.schemas.member import (
     MemberCreate,
     MemberDeleteRequest,
@@ -18,11 +19,21 @@ from app.services.member_service import (
     delete_member,
     delete_photo_file,
     get_member,
+    increment_connections_count,
+    increment_profile_views_daily,
     search_members,
     update_member,
 )
 from app.utils.kafka_envelope import build_event
 from app.utils.kafka_producer import publish_event
+from app.utils.redis_cache import (
+    TTL_MEMBER_GET,
+    TTL_MEMBER_SEARCH,
+    cache_delete,
+    cache_delete_pattern,
+    cache_get,
+    cache_set,
+)
 
 router = APIRouter(prefix="/members", tags=["Members"])
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
@@ -33,6 +44,8 @@ def create_member_route(payload: MemberCreate, db: Session = Depends(get_db)):
     ok, message, member_id, member = create_member(db, payload)
     if not ok:
         return MemberResponse(success=False, message=message, error=message)
+
+    cache_delete_pattern("members:search:*")
 
     event = build_event(
         event_type="member.created",
@@ -55,15 +68,21 @@ def create_member_route(payload: MemberCreate, db: Session = Depends(get_db)):
 
 @router.post("/get", response_model=MemberResponse)
 def get_member_route(payload: MemberGetRequest, db: Session = Depends(get_db)):
+    cache_key = f"members:get:{payload.member_id}"
+    cached = cache_get(cache_key)
+    if cached and not payload.emit_profile_viewed:
+        return MemberResponse(success=True, message="Member fetched successfully", member=cached)
+
     member = get_member(db, payload.member_id)
     if not member:
         return MemberResponse(success=False, message="Member not found", error="Member not found")
+
+    cache_set(cache_key, member, TTL_MEMBER_GET)
 
     if payload.emit_profile_viewed:
         actor_id = payload.viewer_id or "anonymous"
         trace_id = str(uuid4())
         view_source = payload.view_source or "profile_page"
-
         event = build_event(
             event_type="profile.viewed",
             actor_id=actor_id,
@@ -84,11 +103,14 @@ def get_member_route(payload: MemberGetRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/update", response_model=MemberResponse)
-def update_member_route(payload: MemberUpdate, db: Session = Depends(get_db)):
+def update_member_route(payload: MemberUpdate, db: Session = Depends(get_db), _: dict = Depends(get_current_user)):
     old = get_member(db, payload.member_id)
     ok, message, member = update_member(db, payload)
     if not ok:
         return MemberResponse(success=False, message=message, error=message)
+
+    cache_delete(f"members:get:{payload.member_id}")
+    cache_delete_pattern("members:search:*")
 
     event = build_event(
         event_type="member.updated",
@@ -102,7 +124,7 @@ def update_member_route(payload: MemberUpdate, db: Session = Depends(get_db)):
 
 
 @router.post("/delete", response_model=MemberResponse)
-def delete_member_route(payload: MemberDeleteRequest, db: Session = Depends(get_db)):
+def delete_member_route(payload: MemberDeleteRequest, db: Session = Depends(get_db), _: dict = Depends(get_current_user)):
     member = get_member(db, payload.member_id)
     if not member:
         return MemberResponse(success=False, message="Member not found", error="Member not found")
@@ -110,12 +132,22 @@ def delete_member_route(payload: MemberDeleteRequest, db: Session = Depends(get_
     ok = delete_member(db, payload.member_id)
     if not ok:
         return MemberResponse(success=False, message="Delete failed", error="Delete failed")
+
+    cache_delete(f"members:get:{payload.member_id}")
+    cache_delete_pattern("members:search:*")
+
     return MemberResponse(success=True, message="Member deleted successfully", member_id=payload.member_id)
 
 
 @router.post("/search", response_model=MemberResponse)
 def search_members_route(payload: MemberSearchRequest, db: Session = Depends(get_db)):
+    cache_key = f"members:search:{payload.keyword}:{payload.skill}:{payload.location}"
+    cached = cache_get(cache_key)
+    if cached:
+        return MemberResponse(success=True, message="Members fetched successfully", members=cached)
+
     members = search_members(db, payload)
+    cache_set(cache_key, members, TTL_MEMBER_SEARCH)
     return MemberResponse(success=True, message="Members fetched successfully", members=members)
 
 
@@ -125,6 +157,7 @@ async def upload_photo_route(
     member_id: str = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _: dict = Depends(get_current_user),
 ):
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
@@ -158,6 +191,9 @@ async def upload_photo_route(
             output_path.unlink(missing_ok=True)
             return PhotoUploadResponse(success=False, message=message, error=message)
 
+        cache_delete(f"members:get:{member_id}")
+        cache_delete_pattern("members:search:*")
+
         event = build_event(
             event_type="member.updated",
             actor_id=member_id,
@@ -173,3 +209,21 @@ async def upload_photo_route(
         profile_photo_url=photo_url,
         filename=filename,
     )
+
+
+@router.post("/{member_id}/increment-connections")
+def increment_connections_route(member_id: str, db: Session = Depends(get_db)):
+    ok = increment_connections_count(db, member_id)
+    if not ok:
+        return {"success": False, "message": "Member not found"}
+    cache_delete(f"members:get:{member_id}")
+    return {"success": True}
+
+
+@router.post("/{member_id}/increment-profile-views")
+def increment_profile_views_route(member_id: str, db: Session = Depends(get_db)):
+    ok = increment_profile_views_daily(db, member_id)
+    if not ok:
+        return {"success": False, "message": "Member not found"}
+    cache_delete(f"members:get:{member_id}")
+    return {"success": True}

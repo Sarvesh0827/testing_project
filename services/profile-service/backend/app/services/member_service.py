@@ -1,8 +1,45 @@
 import json
 from pathlib import Path
 from uuid import uuid4
-from sqlalchemy import or_
+from sqlalchemy import and_, or_, func
 from sqlalchemy.orm import Session
+
+STATE_ABBREVS = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+    "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho",
+    "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+    "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
+    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+    "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+    "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+    "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming", "DC": "District of Columbia",
+}
+
+
+def _location_filter(query, location: str):
+    parts = [p.strip() for p in location.split(",") if p.strip()]
+    if len(parts) >= 2:
+        city_q = parts[0]
+        state_raw = parts[1]
+        state_q = STATE_ABBREVS.get(state_raw.upper(), state_raw)
+        city_cond = or_(
+            Member.city.ilike(f"%{city_q}%"),
+            Member.state.ilike(f"%{city_q}%"),
+            Member.country.ilike(f"%{city_q}%"),
+        )
+        state_cond = or_(
+            Member.state.ilike(f"%{state_q}%"),
+            Member.state.ilike(f"%{state_raw}%"),
+            Member.country.ilike(f"%{state_q}%"),
+        )
+        return query.filter(and_(city_cond, state_cond))
+    loc = f"%{location}%"
+    return query.filter(or_(Member.city.ilike(loc), Member.state.ilike(loc), Member.country.ilike(loc)))
 from app.models.member import Member
 from app.schemas.member import MemberCreate, MemberUpdate, MemberSearchRequest
 
@@ -105,21 +142,40 @@ def search_members(db: Session, payload: MemberSearchRequest) -> list[dict]:
     if payload.skill:
         query = query.filter(Member.skills_json.ilike(f"%{payload.skill}%"))
     if payload.location:
-        loc = f"%{payload.location}%"
-        query = query.filter(or_(Member.city.ilike(loc), Member.state.ilike(loc), Member.country.ilike(loc)))
+        query = _location_filter(query, payload.location)
     if payload.keyword:
         kw = f"%{payload.keyword}%"
+        full_name = func.concat(Member.first_name, ' ', Member.last_name)
         query = query.filter(
             or_(
+                full_name.ilike(kw),
                 Member.first_name.ilike(kw),
                 Member.last_name.ilike(kw),
-                Member.email.ilike(kw),
                 Member.headline.ilike(kw),
                 Member.about_summary.ilike(kw),
                 Member.skills_json.ilike(kw),
             )
         )
-    return [_member_to_dict(member) for member in query.order_by(Member.created_at.desc()).all()]
+    limit = getattr(payload, 'limit', None) or 50
+    return [_member_to_dict(m) for m in query.order_by(Member.connections_count.desc()).limit(limit).all()]
+
+
+def increment_connections_count(db: Session, member_id: str) -> bool:
+    member = db.query(Member).filter(Member.member_id == member_id).first()
+    if not member:
+        return False
+    member.connections_count = (member.connections_count or 0) + 1
+    db.commit()
+    return True
+
+
+def increment_profile_views_daily(db: Session, member_id: str) -> bool:
+    member = db.query(Member).filter(Member.member_id == member_id).first()
+    if not member:
+        return False
+    member.profile_views_daily = (member.profile_views_daily or 0) + 1
+    db.commit()
+    return True
 
 
 def delete_photo_file(upload_root: Path, profile_photo_url: str | None):
