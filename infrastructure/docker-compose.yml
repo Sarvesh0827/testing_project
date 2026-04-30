@@ -155,6 +155,7 @@ services:
       REDIS_URL: redis://redis:6379
       REDIS_TTL_SEARCH_SECONDS: 60
       REDIS_TTL_GET_SECONDS: 10
+      JWT_SECRET: "changeme-replace-with-32-char-random-string"
     command: sh -c "npm run db:migrate && node src/server.js"
     networks:
       - data236
@@ -180,6 +181,7 @@ services:
       KAFKA_BROKER: kafka:29092
       KAFKA_BROKERS: kafka:29092
       KAFKA_CLIENT_ID: application-service
+      JWT_SECRET: "changeme-replace-with-32-char-random-string"
     networks:
       - data236
 

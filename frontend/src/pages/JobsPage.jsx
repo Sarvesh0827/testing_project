@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import JobCard from '../components/JobCard.jsx'
 import JobDetailPanel from '../components/JobDetailPanel.jsx'
 import { useAuth } from '../context/AuthContext'
 import { submitApplication } from '../api/applicationApi'
+import EasyApplyModal from '../components/EasyApplyModal'
 
 const EMPLOYMENT_OPTIONS = ['FULL_TIME', 'PART_TIME', 'CONTRACT', 'INTERNSHIP']
 const EXPERIENCE_OPTIONS = ['Internship', 'Entry', 'Associate', 'Mid-Senior', 'Director']
@@ -61,8 +63,12 @@ async function postJson (url, payload) {
 
 export default function JobsPage () {
   const { user } = useAuth()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
   const [keyword, setKeyword]               = useState('')
-  const [location, setLocation]             = useState('')
+  const [locationInput, setLocationInput]     = useState('')
   const [employmentTypes, setEmploymentTypes] = useState([])
   const [experienceLevels, setExperienceLevels] = useState([])
   const [remoteModes, setRemoteModes]       = useState([])
@@ -88,10 +94,33 @@ export default function JobsPage () {
   const [applyingJobId, setApplyingJobId]   = useState('')
   const [debouncedSearchKey, setDebouncedSearchKey] = useState('')
   const [refreshTick, setRefreshTick]           = useState(0)
+  const [showApplyModal, setShowApplyModal]     = useState(false)
+  const [targetJob, setTargetJob]               = useState(null)
 
   const pillsRef = useRef(null)
 
-  // ── Load saved job IDs for the logged-in user on mount ──
+  useEffect(() => {
+    const memberId = user?.member_id
+    if (!memberId) return
+
+    // ── Handle incoming ?apply=true&jobId=... from other pages ──
+    const applyParam = searchParams.get('apply')
+    const jobIdParam = searchParams.get('jobId')
+
+    if (applyParam === 'true' && jobIdParam) {
+      // Find the job in the current list or wait for it to load
+      const job = jobs.find(j => j.job_id === jobIdParam)
+      if (job) {
+        setTargetJob(job)
+        setSelectedJobId(jobIdParam)
+        setShowApplyModal(true)
+        // Clear params to avoid re-opening on refresh
+        navigate('/jobs', { replace: true })
+      }
+    }
+  }, [user, searchParams, jobs, navigate])
+
+  // ── Load saved job IDs ──
   useEffect(() => {
     const memberId = user?.member_id
     if (!memberId) return
@@ -124,11 +153,11 @@ export default function JobsPage () {
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchKey(JSON.stringify({
-        keyword, location, employmentTypes, experienceLevels, remoteModes, industries, dateFilter, companyFilter
+        keyword, locationInput, employmentTypes, experienceLevels, remoteModes, industries, dateFilter, companyFilter
       }))
     }, 300)
     return () => clearTimeout(timer)
-  }, [keyword, location, employmentTypes, experienceLevels, remoteModes, industries, dateFilter, companyFilter])
+  }, [keyword, locationInput, employmentTypes, experienceLevels, remoteModes, industries, dateFilter, companyFilter])
 
   // ── Auto-refresh every 30s so newly posted jobs appear ──
   useEffect(() => {
@@ -143,7 +172,7 @@ export default function JobsPage () {
     let cancelled = false
     const parsed = debouncedSearchKey
       ? JSON.parse(debouncedSearchKey)
-      : { keyword: '', location: '', employmentTypes: [], experienceLevels: [], remoteModes: [], industries: [], dateFilter: '', companyFilter: '' }
+      : { keyword: '', locationInput: '', employmentTypes: [], experienceLevels: [], remoteModes: [], industries: [], dateFilter: '', companyFilter: '' }
 
     async function fetchJobs () {
       try {
@@ -153,7 +182,7 @@ export default function JobsPage () {
           page,
           limit: PAGE_SIZE,
           keyword:         parsed.keyword.trim() || undefined,
-          location:        parsed.location.trim() || undefined,
+          location:        parsed.locationInput.trim() || undefined,
           company:         parsed.companyFilter?.trim() || undefined,
           employment_type: parsed.employmentTypes.length ? parsed.employmentTypes : undefined,
           seniority_level: parsed.experienceLevels.length ? parsed.experienceLevels : undefined,
@@ -376,21 +405,32 @@ export default function JobsPage () {
     if (!job) return
     const memberId = user?.member_id
     if (!memberId) { setEventNotice('Sign in to apply.'); return }
-    setApplyingJobId(job.job_id)
+    setTargetJob(job)
+    setShowApplyModal(true)
+  }
+
+  async function handleModalSubmit(payload) {
+    setApplyingJobId(payload.job_id)
     setEventNotice('')
     try {
-      await submitApplication({ job_id: job.job_id, member_id: memberId })
+      await submitApplication(payload)
       setEventNotice('Application submitted!')
+      setShowApplyModal(false)
       setTimeout(() => setEventNotice(''), 3000)
     } catch (e) {
-      const msg = e.message || ''
-      if (msg.toLowerCase().includes('duplicate')) {
-        setEventNotice('You have already applied to this job.')
-      } else {
-        setEventNotice(msg || 'Apply failed — please try again.')
-      }
+      setEventNotice(e.message || 'Apply failed — please try again.')
     } finally {
       setApplyingJobId('')
+    }
+  }
+
+  async function handleModalSave(payload) {
+    try {
+      await submitApplication(payload)
+      setEventNotice('Draft saved.')
+      setTimeout(() => setEventNotice(''), 3000)
+    } catch (e) {
+      console.error('Save draft failed:', e)
     }
   }
 
@@ -409,8 +449,8 @@ export default function JobsPage () {
         />
         <input
           className="jobs-search-row__input jobs-search-row__input--location"
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
+          value={locationInput}
+          onChange={(e) => setLocationInput(e.target.value)}
           placeholder="City, state, or remote"
           aria-label="Location"
         />
@@ -598,6 +638,15 @@ export default function JobsPage () {
           )}
         </section>
       </section>
+      {showApplyModal && targetJob && (
+        <EasyApplyModal
+          job={targetJob}
+          user={user}
+          onClose={() => setShowApplyModal(false)}
+          onSubmit={handleModalSubmit}
+          onSave={handleModalSave}
+        />
+      )}
     </main>
   )
 }

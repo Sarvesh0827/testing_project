@@ -27,5 +27,5 @@ CREATE TABLE IF NOT EXISTS job_postings (
   KEY idx_job_postings_company (company_id),
   KEY idx_job_postings_status (status),
   KEY idx_job_postings_recruiter (recruiter_id),
-  FULLTEXT KEY ft_job_postings_search (title, description, company_name)
+  FULLTEXT KEY ft_job_postings_search (title, description)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

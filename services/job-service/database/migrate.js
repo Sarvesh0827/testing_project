@@ -9,7 +9,8 @@ const SKIPPABLE = new Set([
   'ER_DUP_FIELDNAME',
   'ER_DUP_KEYNAME',
   'ER_CANT_DUP',
-  'ER_DUP_ENTRY'
+  'ER_DUP_ENTRY',
+  'ER_CANT_DROP_FIELD_OR_KEY'
 ])
 
 async function main () {

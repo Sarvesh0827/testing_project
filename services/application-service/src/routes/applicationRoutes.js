@@ -19,7 +19,11 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   fileFilter: function (req, file, cb) {
-    if (file.mimetype === "application/pdf") {
+    const isPdf =
+      file.mimetype === "application/pdf" ||
+      file.mimetype === "application/octet-stream" ||
+      file.originalname.toLowerCase().endsWith(".pdf");
+    if (isPdf) {
       cb(null, true);
     } else {
       cb(new Error("Only PDF files are allowed"));
@@ -38,5 +42,6 @@ router.post("/addNote",       ...requireRole("recruiter"), applicationController
 
 // Open: get single application (used internally)
 router.post("/get", applicationController.getApplication);
+router.get("/draft/:job_id/:member_id", applicationController.getDraft);
 
 module.exports = router;

@@ -66,6 +66,7 @@ export default function RecruiterDashboardPage() {
   const [error, setError] = useState('')
   const [jobsForAI, setJobsForAI] = useState([])
   const [aiMetrics, setAiMetrics] = useState(null)
+  const [notification, setNotification] = useState(null)
 
   const recruiterId = user?.member_id
 
@@ -104,8 +105,35 @@ export default function RecruiterDashboardPage() {
       .catch(() => {})
   }, [recruiterId])
 
+  // Real-time updates via SSE
+  useEffect(() => {
+    if (!recruiterId) return
+    const sse = new EventSource(`/api/events/recruiter/live-feed/${recruiterId}`)
+    
+    sse.addEventListener('update', (e) => {
+      const data = JSON.parse(e.data)
+      if (data.topic === 'application.submitted') {
+        setNotification(`New application received for job: ${data.event.payload.job_id}`)
+        setTimeout(() => setNotification(null), 5000)
+        // Refresh dashboard data
+        getRecruiterDashboard(recruiterId).then(d => setData(d)).catch(() => {})
+      }
+    })
+
+    return () => sse.close()
+  }, [recruiterId])
+
   return (
     <div style={{ maxWidth: 1060, margin: '0 auto', padding: '24px 16px' }}>
+      {notification && (
+        <div style={{
+          position: 'fixed', top: 20, right: 20, background: '#057642', color: '#fff',
+          padding: '12px 24px', borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          zIndex: 10000, animation: 'slideIn 0.3s ease-out'
+        }}>
+          <strong>{notification}</strong>
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ background: '#fff', border: '1px solid rgba(0,0,0,0.12)', borderRadius: 8, padding: '20px 24px', marginBottom: 16 }}>

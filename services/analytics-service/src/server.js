@@ -23,8 +23,8 @@ app.use((err, req, res, _next) => {
 
 async function main() {
   await connect()
-  await startConsumer()
   app.listen(PORT, () => console.log(`Analytics service running on port ${PORT}`))
+  startConsumer().catch(e => console.error('Kafka consumer error (will retry):', e.message))
 }
 
 main().catch(e => { console.error(e); process.exit(1) })

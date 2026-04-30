@@ -36,26 +36,39 @@ async function handleResponse(res) {
 }
 
 export async function submitApplication(payload) {
-  const formData = new FormData();
-  formData.append("job_id", payload.job_id);
-  formData.append("member_id", payload.member_id);
+  const isMultipart = !!payload.resume_file;
+  
+  let body;
+  let headers = { ...authHeaders() };
 
-  if (payload.recruiter_id) {
-    formData.append("recruiter_id", payload.recruiter_id);
-  }
-
-  if (payload.cover_letter) {
-    formData.append("cover_letter", payload.cover_letter);
-  }
-
-  if (payload.resume) {
-    formData.append("resume", payload.resume);
+  if (isMultipart) {
+    body = new FormData();
+    body.append("job_id", payload.job_id);
+    body.append("member_id", payload.member_id);
+    if (payload.recruiter_id) body.append("recruiter_id", payload.recruiter_id);
+    if (payload.resume_ref) body.append("resume_ref", payload.resume_ref);
+    if (payload.cover_letter) body.append("cover_letter", payload.cover_letter);
+    body.append("metadata", JSON.stringify(payload.metadata || {}));
+    body.append("is_draft", payload.is_draft ? "true" : "false");
+    body.append("resume", payload.resume_file);
+    // Don't set Content-Type header; fetch will set it with boundary
+  } else {
+    headers["Content-Type"] = "application/json";
+    body = JSON.stringify({
+      job_id: payload.job_id,
+      member_id: payload.member_id,
+      recruiter_id: payload.recruiter_id,
+      resume_ref: payload.resume_ref,
+      cover_letter: payload.cover_letter,
+      metadata: payload.metadata,
+      is_draft: !!payload.is_draft
+    });
   }
 
   const res = await fetch(`${BASE_URL}/submit`, {
     method: "POST",
-    headers: { ...authHeaders() },
-    body: formData,
+    headers,
+    body,
   });
 
   return handleResponse(res);
@@ -103,5 +116,13 @@ export async function addRecruiterNote(application_id, recruiter_note) {
     headers: { "Content-Type": "application/json", ...authHeaders() },
     body: JSON.stringify({ application_id, recruiter_note }),
   });
+  return handleResponse(res);
+}
+
+export async function getDraft(jobId, memberId) {
+  const res = await fetch(`${BASE_URL}/draft/${jobId}/${memberId}`, {
+    headers: authHeaders()
+  });
+  if (res.status === 404) return null;
   return handleResponse(res);
 }

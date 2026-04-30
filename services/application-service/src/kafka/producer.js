@@ -22,9 +22,19 @@ async function publishApplicationSubmitted(application) {
           trace_id: uuidv4(),
           timestamp: new Date().toISOString(),
           actor_id: application.member_id,
+          entity: {
+            entity_type: "application",
+            entity_id: application.application_id
+          },
+          payload: {
+            application_id: application.application_id,
+            job_id: application.job_id,
+            member_id: application.member_id,
+            resume_ref: application.resume_url,
+            recruiter_id: application.recruiter_id,
+            metadata: application.metadata
+          },
           idempotency_key: application.application_id,
-          entity: { entity_type: "application", entity_id: application.application_id },
-          payload: application,
         }),
       },
     ],

@@ -1,6 +1,6 @@
 const pool = require("../config/db");
 
-async function createApplication(application) {
+async function upsertApplication(application) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
@@ -12,14 +12,18 @@ async function createApplication(application) {
         job_id,
         member_id,
         recruiter_id,
-        resume_text,
-        resume_file_name,
-        resume_file_path,
+        resume_url,
         cover_letter,
-        status,
-        recruiter_note
+        metadata,
+        status
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        resume_url = VALUES(resume_url),
+        cover_letter = VALUES(cover_letter),
+        metadata = VALUES(metadata),
+        status = VALUES(status),
+        updated_at = CURRENT_TIMESTAMP
     `;
 
     const values = [
@@ -27,12 +31,10 @@ async function createApplication(application) {
       application.job_id,
       application.member_id,
       application.recruiter_id || null,
-      application.resume_text || null,
-      application.resume_file_name || null,
-      application.resume_file_path || null,
+      application.resume_url || null,
       application.cover_letter || null,
+      application.metadata ? JSON.stringify(application.metadata) : null,
       application.status || "submitted",
-      application.recruiter_note || null,
     ];
 
     const [result] = await conn.execute(query, values);
@@ -49,23 +51,27 @@ async function createApplication(application) {
 async function createApplicationConn(conn, application) {
   const query = `
     INSERT INTO applications
-    (application_id,job_id,member_id,recruiter_id,resume_text,resume_file_name,resume_file_path,cover_letter,status,recruiter_note)
-    VALUES (?,?,?,?,?,?,?,?,?,?)
-  `
+    (application_id, job_id, member_id, recruiter_id, resume_url, cover_letter, metadata, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      resume_url = VALUES(resume_url),
+      cover_letter = VALUES(cover_letter),
+      metadata = VALUES(metadata),
+      status = VALUES(status),
+      updated_at = CURRENT_TIMESTAMP
+  `;
   const values = [
     application.application_id,
     application.job_id,
     application.member_id,
     application.recruiter_id || null,
-    application.resume_text || null,
-    application.resume_file_name || null,
-    application.resume_file_path || null,
+    application.resume_url || null,
     application.cover_letter || null,
-    application.status || 'submitted',
-    application.recruiter_note || null,
-  ]
-  const [result] = await conn.execute(query, values)
-  return result
+    application.metadata ? JSON.stringify(application.metadata) : null,
+    application.status || "submitted",
+  ];
+  const [result] = await conn.execute(query, values);
+  return result;
 }
 
 async function findDuplicate(job_id, member_id) {
@@ -117,7 +123,7 @@ async function addNote(application_id, recruiter_note) {
 }
 
 module.exports = {
-  createApplication,
+  upsertApplication,
   createApplicationConn,
   findDuplicate,
   findById,

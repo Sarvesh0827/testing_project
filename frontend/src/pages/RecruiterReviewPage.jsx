@@ -396,20 +396,29 @@ function AppDetail({ appId, onStatusChanged, memberMap = {} }) {
             <div style={{ whiteSpace: "pre-wrap", fontSize: 14, color: LI.darkGray }}>
               {app.resume_text}
             </div>
-          ) : app.resume_file_name ? (
-            <div style={{ background: LI.bgCard, border: `1px solid ${LI.lightSilver}`, borderRadius: 10, padding: "32px 20px", textAlign: "center" }}>
-              <div style={{ fontSize: 36, marginBottom: 10 }}>📄</div>
-              <div style={{ fontWeight: 600, color: LI.darkGray, marginBottom: 8 }}>{app.resume_file_name}</div>
-              <a
-                href={`http://localhost:5003/uploads/resumes/${app.resume_file_name}`}
-                target="_blank"
-                rel="noreferrer"
-                style={{ color: LI.blue, fontWeight: 700, fontSize: 14 }}
-              >
-                Download / View Resume PDF
-              </a>
-            </div>
-          ) : (
+          ) : (app.resume_file_name || app.resume_url) ? (() => {
+            // Build a clean filename and URL
+            const rawUrl = app.resume_url || '';
+            const fileName = app.resume_file_name || rawUrl.split('/').pop() || 'resume.pdf';
+            // Prefer nginx proxy path; fall back to absolute URL if already http
+            const downloadHref = rawUrl.startsWith('http')
+              ? rawUrl
+              : `/uploads/${rawUrl.replace(/^uploads\//, '')}`;
+            return (
+              <div style={{ background: LI.bgCard, border: `1px solid ${LI.lightSilver}`, borderRadius: 10, padding: "32px 20px", textAlign: "center" }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>📄</div>
+                <div style={{ fontWeight: 600, color: LI.darkGray, marginBottom: 8 }}>{fileName}</div>
+                <a
+                  href={downloadHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  style={{ color: LI.blue, fontWeight: 700, fontSize: 14 }}
+                >
+                  Download / View Resume PDF
+                </a>
+              </div>
+            );
+          })() : (
             <div style={{ textAlign: "center", color: LI.slate, padding: "32px 0" }}>
               No resume submitted
             </div>

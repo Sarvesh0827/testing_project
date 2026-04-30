@@ -77,7 +77,7 @@ export default function SavedJobsPage() {
               }}>
                 {job.status}
               </span>
-              <Link to={`/apply/${job.job_id}`} style={{
+              <Link to={`/jobs?apply=true&jobId=${job.job_id}`} style={{
                 background: '#0A66C2', color: '#fff', border: 'none',
                 borderRadius: 999, padding: '6px 16px', fontSize: 14, fontWeight: 600,
                 textDecoration: 'none', cursor: 'pointer',

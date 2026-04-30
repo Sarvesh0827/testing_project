@@ -17,13 +17,12 @@ CREATE TABLE IF NOT EXISTS applications (
   recruiter_id    VARCHAR(36)   NULL,
 
   -- Application content
-  resume_text       LONGTEXT      NULL,
-  resume_file_name  VARCHAR(255)  NULL,
-  resume_file_path  VARCHAR(512)  NULL,
+  resume_url        VARCHAR(512)  NULL,
   cover_letter      TEXT          NULL,
+  metadata          JSON          NULL, -- For extra fields like "top choice", "education", etc.
 
-  -- Status machine: submitted → reviewed → accepted | rejected
-  status          ENUM('submitted', 'reviewed', 'accepted', 'rejected')
+  -- Status machine: draft, submitted, reviewing, rejected, interview, offer
+  status          ENUM('draft', 'submitted', 'reviewing', 'rejected', 'interview', 'offer')
                   NOT NULL DEFAULT 'submitted',
 
   -- Recruiter interaction
@@ -34,10 +33,11 @@ CREATE TABLE IF NOT EXISTS applications (
   updated_at      DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
                   ON UPDATE CURRENT_TIMESTAMP,
 
-  -- Prevents one member from applying to the same job twice
+  -- Prevents one member from applying to the same job twice (only for submitted applications)
+  -- Note: Drafts should not block submission. We might handle this in application logic.
   CONSTRAINT uq_job_member UNIQUE (job_id, member_id),
 
-  -- Indexes for query performance (per spec: job_id, member_id, status)
+  -- Indexes for query performance
   INDEX idx_job_id     (job_id),
   INDEX idx_member_id  (member_id),
   INDEX idx_status     (status),
