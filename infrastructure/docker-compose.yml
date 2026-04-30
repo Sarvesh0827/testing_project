@@ -182,6 +182,7 @@ services:
       KAFKA_BROKERS: kafka:29092
       KAFKA_CLIENT_ID: application-service
       JWT_SECRET: "changeme-replace-with-32-char-random-string"
+    command: sh -c "npm run db:migrate && node src/server.js"
     networks:
       - data236
 

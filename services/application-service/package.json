@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "db:migrate": "node database/migrate.js",
     "test": "jest --testPathPatterns=tests/ --forceExit"
   },
   "dependencies": {
